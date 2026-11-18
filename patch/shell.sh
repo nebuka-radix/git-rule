@@ -8,15 +8,17 @@ fi
 
 cd "$REPO_ROOT"
 
-cat > 003-hotfix.md <<'MARKDOWN'
-# 緊急対応：hotfix
+cat > 004-refactor.md <<'MARKDOWN'
+# リファクタリング：refactor
 
 ## 運用方針
 
-- `main`から`hotfix/issue1`などの作業ブランチを作成する。
-- 修正内容を`main`にマージし、緊急リリースする。
-- その後、同じhotfixブランチを`dev`にもマージする。
-- 両方へのマージ・pushと動作確認が完了した後、hotfixブランチを削除する。
+- `dev`から`refactor/*`の作業ブランチを作成する。
+- 変更の都度、アプリケーション本来の機能が変化していないことを確認する。
+- 確認が完了した変更をコミットする。
+- 作業内容を`dev`にマージし、preview版で動作確認を行う。
+- 統合・確認後に作業ブランチを削除する。
+- `dev`を`main`にマージしてリリースする。
 - `main`と`dev`は継続利用する。
 
 ## 運用フロー
@@ -25,13 +27,13 @@ cat > 003-hotfix.md <<'MARKDOWN'
 gitGraph
     commit id: "初期状態"
     branch dev
-    checkout main
-    branch hotfix/issue1
-    commit id: "緊急の不具合を修正"
-    checkout main
-    merge hotfix/issue1 id: "hotfix/issue1をmainにマージ：緊急リリース"
+    branch refactor/improve-structure
+    commit id: "処理を共通化：機能不変を確認"
+    commit id: "責務を整理：機能不変を確認"
     checkout dev
-    merge hotfix/issue1 id: "hotfix/issue1をdevにマージ"
+    merge refactor/improve-structure id: "refactor/improve-structureをdevにマージ"
+    checkout main
+    merge dev id: "devをmainにマージ"
 ```
 
 図は分岐・マージの関係を示す模式図であり、ブランチ削除操作は表現していない。
@@ -45,62 +47,77 @@ gitGraph
 # mainブランチにいること、未コミットの変更がないことを確認
 git status
 
-# 緊急対応用の作業ブランチを作成
-git switch -c hotfix/issue1
-
-# ここでコード変更・動作確認を行う
-
-# コミット・push
-git add .
-git commit -m "緊急の不具合を修正"
-git push -u origin hotfix/issue1
-
-# mainへのマージ前にログを確認
-git switch main
-git log --graph --oneline --decorate main..hotfix/issue1
-
-# 内容を確認後、mainへ統合・緊急リリース
-git merge hotfix/issue1 \
-  -m "hotfix/issue1をmainにマージ：緊急の不具合を修正"
-git push -u origin main
-
-# mainへの統合後、全体ログを確認
-git log --graph --oneline --decorate --all
-
-# ここで本番環境への反映・動作確認を行う
-
-# devへのマージ前にログを確認
+# devから作業ブランチを作成
 git switch dev
-git log --graph --oneline --decorate dev..hotfix/issue1
+git switch -c refactor/improve-structure
 
-# 同じhotfixブランチをdevへ統合
-git merge hotfix/issue1 \
-  -m "hotfix/issue1をdevにマージ：緊急修正を開発環境に反映"
+# 変更前の動作を確認し、比較基準を整理する
+
+# ここから、変更の都度、以下を繰り返す
+# 1. コードを変更する
+# 2. アプリケーション本来の機能が変化していないことを確認する
+# 3. 意図しない変化がある場合は修正し、再確認する
+# 4. 確認完了後、変更をコミットする
+git add .
+git commit -m "重複する処理を共通化"
+
+# 必要な変更・確認・コミットの完了後、push
+git push -u origin refactor/improve-structure
+
+# マージ前のログ確認
+git switch dev
+git log --graph --oneline --decorate dev..refactor/improve-structure
+
+# 内容を確認後、devへ統合
+git merge refactor/improve-structure \
+  -m "refactor/improve-structureをdevにマージ：内部構造を整理"
 git push -u origin dev
 
-# ここでpreview版の動作確認を行う
+# ここでpreview版の動作確認を行い、
+# アプリケーション本来の機能が変化していないことを確認する
 
-# 両方へのマージ・push・動作確認の完了後、作業ブランチを削除
-git branch -d hotfix/issue1
-git push origin --delete hotfix/issue1
+# マージ・push・動作確認の完了後、作業ブランチを削除
+git branch -d refactor/improve-structure
+git push origin --delete refactor/improve-structure
+
+# mainへ統合・リリース
+git switch main
+git merge dev \
+  -m "devをmainにマージ：内部構造の整理をリリース"
+git push -u origin main
 
 # 全体ログを確認
 git log --graph --oneline --decorate --all
+
+# ここで本番環境への反映・動作確認を行う
 ```
+
+## 機能が変化していないことの確認
+
+作業開始前に確認対象と方法を整理し、変更の都度、変更前と比較する。
+
+- 既存の入力に対する出力・処理結果
+- 画面表示・操作・画面遷移
+- データの登録・更新・削除・取得結果
+- バリデーション・エラー時の動作
+- 変更箇所が影響する周辺機能
+
+プロジェクトに用意されているテストや動作確認手順を使用する。
+具体的なテストコマンドは、対象アプリケーションに合わせて定める。
 
 ## 運用上の注意
 
 - 上記は段階ごとに確認しながら実行する手順であり、一括実行しない。
+- 機能不変の確認は、作業全体の最後だけでなく変更の都度行う。
+- 意図しない機能変化が残っている状態では、次の変更や統合に進まない。
+- 機能追加や仕様変更は混在させず、別の作業として扱う。
+- 競合を解消した場合も、機能が変化していないことを再確認する。
 - 競合やエラーが発生した場合は中断し、解消・確認後に次へ進む。
-- `main`へのpush後、本番環境への反映を確認してから`dev`への適用を進める。
-- `dev`には`main`全体ではなく、今回作成したhotfixブランチを直接マージする。
-- hotfixブランチは、`main`への適用直後には削除しない。
-- 削除前に、`main`と`dev`の両方への適用が完了していることを確認する。
 - 作業ブランチの削除には`-d`を使用し、削除できない場合は理由を確認する。
 - `main`と`dev`は削除しない。
 MARKDOWN
 
-print -- "003-hotfix.md を生成しました。"
+print -- "004-refactor.md を生成しました。"
 
 git add .
-git commit -m '緊急対応のGit運用手順を作成'
+git commit -m 'リファクタリングのGit運用手順を作成'
