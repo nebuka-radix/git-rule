@@ -8,56 +8,16 @@ fi
 
 cd "$REPO_ROOT"
 
-cat > 001-setup.md <<'MARKDOWN'
-# Git初期設定
+cat > 003-hotfix.md <<'MARKDOWN'
+# 緊急対応：hotfix
 
-## マージ設定
+## 運用方針
 
-各開発者が、リポジトリのclone後に実行する。
-
-```bash
-git config --local merge.ff false
-git config --local --get merge.ff
-```
-
-設定値が`false`であることを確認する。
-以降は、`git merge`の`--no-ff`を省略する。
-
-この設定はローカルリポジトリに適用され、pushでは共有されない。
-
-## ブランチ構成
-
-| ブランチ | 用途 |
-| --- | --- |
-| `main` | リリース用。本番環境。 |
-| `dev` | preview版。開発環境としてのメインブランチ。 |
-| `feature/*` | 機能追加の作業ブランチ。 |
-| `hotfix/*` | 緊急対応の作業ブランチ。 |
-| `refactor/*` | リファクタリング用の作業ブランチ。 |
-
-`main`と`dev`は継続利用する。
-`feature/*`は`dev`から分岐し、統合・確認後に削除する。
-
-`hotfix/*`・`refactor/*`の詳細手順は別途定める。
-
-## コミットメッセージ
-
-- 通常のコミット：ブランチ名を含めず、変更内容を簡潔な日本語で記載する。
-- マージコミット：マージ元・マージ先のブランチ名と、統合内容を記載する。
-
-```bash
-git commit -m "検索機能を追加"
-
-git merge feature/add-function \
-  -m "feature/add-functionをdevにマージ：検索機能を追加"
-
-git merge dev \
-  -m "devをmainにマージ：検索機能をリリース"
-```
-MARKDOWN
-
-cat > 002-basic-operation.md <<'MARKDOWN'
-# 基本操作：機能追加からリリースまで
+- `main`から`hotfix/issue1`などの作業ブランチを作成する。
+- 修正内容を`main`にマージし、緊急リリースする。
+- その後、同じhotfixブランチを`dev`にもマージする。
+- 両方へのマージ・pushと動作確認が完了した後、hotfixブランチを削除する。
+- `main`と`dev`は継続利用する。
 
 ## 運用フロー
 
@@ -65,58 +25,64 @@ cat > 002-basic-operation.md <<'MARKDOWN'
 gitGraph
     commit id: "初期状態"
     branch dev
-    branch feature/add-function
-    commit id: "検索機能を追加"
-    checkout dev
-    merge feature/add-function id: "feature/add-functionをdevにマージ"
     checkout main
-    merge dev id: "devをmainにマージ"
+    branch hotfix/issue1
+    commit id: "緊急の不具合を修正"
+    checkout main
+    merge hotfix/issue1 id: "hotfix/issue1をmainにマージ：緊急リリース"
+    checkout dev
+    merge hotfix/issue1 id: "hotfix/issue1をdevにマージ"
 ```
 
 図は分岐・マージの関係を示す模式図であり、ブランチ削除操作は表現していない。
 
 ## 操作手順
 
-`001-setup.md`の初期設定を実施済みであることを前提とする。
-以下は、`dev`を初めて作成する場合の手順である。
+`001-setup.md`の初期設定を実施済みであり、
+`main`と`dev`がローカルに存在することを前提とする。
 
 ```bash
 # mainブランチにいること、未コミットの変更がないことを確認
 git status
 
-# devの準備（作成済みの場合は git switch dev に置き換える）
-git switch -c dev
-
-# 作業ブランチの作成
-git switch -c feature/add-function
+# 緊急対応用の作業ブランチを作成
+git switch -c hotfix/issue1
 
 # ここでコード変更・動作確認を行う
 
 # コミット・push
 git add .
-git commit -m "検索機能を追加"
-git push -u origin feature/add-function
+git commit -m "緊急の不具合を修正"
+git push -u origin hotfix/issue1
 
-# マージ前のログ確認
+# mainへのマージ前にログを確認
+git switch main
+git log --graph --oneline --decorate main..hotfix/issue1
+
+# 内容を確認後、mainへ統合・緊急リリース
+git merge hotfix/issue1 \
+  -m "hotfix/issue1をmainにマージ：緊急の不具合を修正"
+git push -u origin main
+
+# mainへの統合後、全体ログを確認
+git log --graph --oneline --decorate --all
+
+# ここで本番環境への反映・動作確認を行う
+
+# devへのマージ前にログを確認
 git switch dev
-git log --graph --oneline --decorate dev..feature/add-function
+git log --graph --oneline --decorate dev..hotfix/issue1
 
-# 内容を確認後、devへ統合
-git merge feature/add-function \
-  -m "feature/add-functionをdevにマージ：検索機能を追加"
+# 同じhotfixブランチをdevへ統合
+git merge hotfix/issue1 \
+  -m "hotfix/issue1をdevにマージ：緊急修正を開発環境に反映"
 git push -u origin dev
 
 # ここでpreview版の動作確認を行う
 
-# マージ・push・動作確認の完了後、作業ブランチを削除
-git branch -d feature/add-function
-git push origin --delete feature/add-function
-
-# mainへ統合・リリース
-git switch main
-git merge dev \
-  -m "devをmainにマージ：検索機能をリリース"
-git push -u origin main
+# 両方へのマージ・push・動作確認の完了後、作業ブランチを削除
+git branch -d hotfix/issue1
+git push origin --delete hotfix/issue1
 
 # 全体ログを確認
 git log --graph --oneline --decorate --all
@@ -126,14 +92,15 @@ git log --graph --oneline --decorate --all
 
 - 上記は段階ごとに確認しながら実行する手順であり、一括実行しない。
 - 競合やエラーが発生した場合は中断し、解消・確認後に次へ進む。
+- `main`へのpush後、本番環境への反映を確認してから`dev`への適用を進める。
+- `dev`には`main`全体ではなく、今回作成したhotfixブランチを直接マージする。
+- hotfixブランチは、`main`への適用直後には削除しない。
+- 削除前に、`main`と`dev`の両方への適用が完了していることを確認する。
 - 作業ブランチの削除には`-d`を使用し、削除できない場合は理由を確認する。
 - `main`と`dev`は削除しない。
-- 作業ブランチの削除後も、統合済みのコミットとマージの構造は残る。
-- 削除したブランチ名は、マージコミットのメッセージで確認する。
-- ブランチ作成操作そのものや作成日時を記録するものではない。
 MARKDOWN
 
-print -- "001-setup.md と 002-basic-operation.md を生成しました。"
+print -- "003-hotfix.md を生成しました。"
 
 git add .
-git commit -m 'Git初期設定と基本操作のドキュメントを作成'
+git commit -m '緊急対応のGit運用手順を作成'

@@ -16,13 +16,13 @@ git config --local --get merge.ff
 
 ## ブランチ構成
 
-| ブランチ | 用途 |
-| --- | --- |
-| `main` | リリース用。本番環境。 |
-| `dev` | preview版。開発環境としてのメインブランチ。 |
-| `feature/*` | 機能追加の作業ブランチ。 |
-| `hotfix/*` | 緊急対応の作業ブランチ。 |
-| `refactor/*` | リファクタリング用の作業ブランチ。 |
+| ブランチ     | 用途                                        |
+|--------------|---------------------------------------------|
+| `main`       | リリース用。本番環境。                      |
+| `dev`        | preview版。開発環境としてのメインブランチ。 |
+| `feature/*`  | 機能追加の作業ブランチ。                    |
+| `hotfix/*`   | 緊急対応の作業ブランチ。                    |
+| `refactor/*` | リファクタリング用の作業ブランチ。          |
 
 `main`と`dev`は継続利用する。
 `feature/*`は`dev`から分岐し、統合・確認後に削除する。
@@ -36,10 +36,8 @@ git config --local --get merge.ff
 
 ```bash
 git commit -m "検索機能を追加"
-
 git merge feature/add-function \
   -m "feature/add-functionをdevにマージ：検索機能を追加"
-
 git merge dev \
   -m "devをmainにマージ：検索機能をリリース"
 ```
